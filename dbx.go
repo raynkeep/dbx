@@ -458,7 +458,6 @@ func S2D(t interface{}) (d []DocElem) {
 					d = append(d, DocElem{arr[0], sv.Field(i).Interface()})
 				}
 			} else {
-				fmt.Println(field)
 				d = append(d, DocElem{field, sv.Field(i).Interface()})
 			}
 		}
