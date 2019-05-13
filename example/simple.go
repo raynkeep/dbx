@@ -113,7 +113,13 @@ CREATE TABLE user
 
 	// 读取多条 到 结构体
 	var list []User
-	err = db.Table("user").Find(dbx.S{}).All(&list)
+	err = db.Table("user").Fields([]string{
+		"uid",
+		"name",
+		"createDate",
+	}).Sort([]string{"-gid", "-uid"}).Skip(2).Limit(2).Find(dbx.S{
+		{"uid", "<", 5},
+	}).All(&list)
 	if err != nil {
 		panic(err)
 	}
