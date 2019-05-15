@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"reflect"
 	"strconv"
@@ -430,7 +431,7 @@ func GetSqlWhere(selector S) (whereStr string, args []interface{}) {
 					args = append(args, v2)
 				}
 			default:
-				fmt.Println("Unsupported types:", t)
+				panic(fmt.Sprintf("Unsupported types: %v", t))
 			}
 			if s2 != "" {
 				s2 = strings.Trim(s2, ",")
@@ -512,7 +513,7 @@ func LogWrite(s string, args ...interface{}) {
 		fmt.Sprintf(strings.Replace(s, "?", "'%v'", -1), ReplaceSlash(args...)...),
 	)
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err)
 	}
 }
 
@@ -523,7 +524,7 @@ func ErrorLogWrite(e error, s string, args ...interface{}) {
 
 	f, err := os.OpenFile(ErrorLogFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err)
 	}
 
 	str := fmt.Sprintf("%v | ERROR: %v | SQL: %s\n",
@@ -532,11 +533,11 @@ func ErrorLogWrite(e error, s string, args ...interface{}) {
 		fmt.Sprintf(strings.Replace(s, "?", "'%v'", -1), ReplaceSlash(args...)...),
 	)
 	if _, err := f.Write([]byte(str)); err != nil {
-		fmt.Println(err)
+		log.Println(err)
 	}
 
 	if err := f.Close(); err != nil {
-		fmt.Println(err)
+		log.Println(err)
 	}
 }
 
