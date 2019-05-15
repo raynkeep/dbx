@@ -82,12 +82,8 @@ func (q *Query) Skip(skip int64) *Query {
 	return q
 }
 
-func (q *Query) InsertS(st interface{}) (id int64, err error) {
-	id, err = q.Insert(S2D(st))
-	return
-}
-
-func (q *Query) Insert(data D) (id int64, err error) {
+func (q *Query) Insert(d interface{}) (id int64, err error) {
+	data := S2D(d)
 	kStr, vStr, args := GetSqlInsert(data)
 	s := "INSERT INTO `" + q.table + "`(" + kStr + ") VALUES (" + vStr + ")"
 	LogWrite(s, args...)
@@ -115,7 +111,8 @@ func (q *Query) Insert(data D) (id int64, err error) {
 	return
 }
 
-func (q *Query) InsertIgnore(data D) (id int64, err error) {
+func (q *Query) InsertIgnore(d interface{}) (id int64, err error) {
+	data := S2D(d)
 	kStr, vStr, args := GetSqlInsert(data)
 	s := "INSERT IGNORE INTO `" + q.table + "`(" + kStr + ") VALUES (" + vStr + ")"
 	LogWrite(s, args...)
@@ -134,7 +131,8 @@ func (q *Query) InsertIgnore(data D) (id int64, err error) {
 	return
 }
 
-func (q *Query) Replace(data D) (id int64, err error) {
+func (q *Query) Replace(d interface{}) (id int64, err error) {
+	data := S2D(d)
 	kStr, vStr, args := GetSqlInsert(data)
 	s := "REPLACE INTO `" + q.table + "`(" + kStr + ") VALUES (" + vStr + ")"
 	LogWrite(s, args...)
@@ -446,21 +444,36 @@ func GetSqlWhere(selector S) (whereStr string, args []interface{}) {
 	return
 }
 
-func S2D(t interface{}) (d []DocElem) {
-	st := reflect.TypeOf(t)
-	sv := reflect.ValueOf(t)
-	for i := 0; i < st.NumField(); i++ {
-		f := st.Field(i)
-		if field := f.Tag.Get("db"); field != "" {
-			if strings.Contains(field, ",") {
-				arr := strings.Split(field, ",")
-				if arr[1] != "auto_increment" {
-					d = append(d, DocElem{arr[0], sv.Field(i).Interface()})
+func S2D(data interface{}) (d []DocElem) {
+	st := reflect.TypeOf(data)
+	sv := reflect.ValueOf(data)
+
+	f := func() {
+		for i := 0; i < st.NumField(); i++ {
+			f := st.Field(i)
+			if field := f.Tag.Get("db"); field != "" {
+				if strings.Contains(field, ",") {
+					arr := strings.Split(field, ",")
+					if arr[1] != "auto_increment" {
+						d = append(d, DocElem{arr[0], sv.Field(i).Interface()})
+					}
+				} else {
+					d = append(d, DocElem{field, sv.Field(i).Interface()})
 				}
-			} else {
-				d = append(d, DocElem{field, sv.Field(i).Interface()})
 			}
 		}
+	}
+
+	if st.Kind() == reflect.TypeOf(D{}).Kind() {
+		d = data.(D)
+	} else if sv.Kind() == reflect.Struct {
+		f()
+	} else if sv.Kind() == reflect.Ptr && sv.Elem().Kind() == reflect.Struct {
+		st = st.Elem()
+		sv = sv.Elem()
+		f()
+	} else {
+		panic("Insert() value is error")
 	}
 	return
 }

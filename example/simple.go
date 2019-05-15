@@ -72,7 +72,7 @@ CREATE TABLE user
 		st.Gid = 3
 		st.Name = "twoTest" + strconv.Itoa(i)
 		st.CreateDate = time.Now()
-		uid, err := db.Table("user").InsertS(st)
+		uid, err := db.Table("user").Insert(&st)
 		if err != nil {
 			panic(err)
 		}
