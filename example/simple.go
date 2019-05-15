@@ -127,10 +127,11 @@ CREATE TABLE user
 	var list []User
 	err = db.Table("user").Fields([]string{
 		"uid",
+		"gid",
 		"name",
 		"createDate",
-	}).Sort([]string{"-gid", "-uid"}).Skip(2).Limit(2).Find(dbx.S{
-		{"uid", "<", 5},
+	}).Sort([]string{"-gid", "-uid"}).Skip(0).Limit(10).Find(dbx.S{
+		{"uid", "<=", 5},
 	}).All(&list)
 	if err != nil {
 		panic(err)
@@ -148,10 +149,10 @@ CREATE TABLE user
 		panic(err)
 	}
 	fmt.Println()
-	fmt.Println("row Map:", rowMap)
+	fmt.Println("Map Columns:", columns)
+	fmt.Println("Map Row:", rowMap)
 	rowMapByte, _ := json.Marshal(rowMap)
-	fmt.Println("Json Map:", string(rowMapByte))
-	fmt.Println("columns:", columns)
+	fmt.Println("Map Json:", string(rowMapByte))
 
 	// 读取多条 到 Map
 	listMap, columns, err := db.Table("user").Find(dbx.S{
@@ -161,10 +162,10 @@ CREATE TABLE user
 		panic(err)
 	}
 	fmt.Println()
-	fmt.Println("List Map:", listMap)
+	fmt.Println("Map Columns:", columns)
+	fmt.Println("Map List:", listMap)
 	listMapByte, _ := json.Marshal(listMap)
-	fmt.Println("Json Map:", string(listMapByte))
-	fmt.Println("columns:", columns)
+	fmt.Println("Map Json:", string(listMapByte))
 
 	// 删除
 	n, err = db.Table("user").Delete(dbx.S{

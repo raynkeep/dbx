@@ -2,6 +2,7 @@ package dbx
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -12,12 +13,11 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
-	"github.com/jmoiron/sqlx"
 	_ "github.com/mattn/go-sqlite3"
 )
 
 type DB struct {
-	*sqlx.DB
+	*sql.DB
 }
 
 type Query struct {
@@ -46,7 +46,7 @@ type DocElem struct {
 }
 
 func Open(driverName, dataSourceName string) (*DB, error) {
-	db, err := sqlx.Open(driverName, dataSourceName)
+	db, err := sql.Open(driverName, dataSourceName)
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +84,7 @@ func (q *Query) Skip(skip int64) *Query {
 }
 
 func (q *Query) Insert(d interface{}) (id int64, err error) {
-	data := S2D(d)
+	data := s2d(d)
 	kStr, vStr, args := GetSqlInsert(data)
 	s := "INSERT INTO `" + q.table + "`(" + kStr + ") VALUES (" + vStr + ")"
 	LogWrite(s, args...)
@@ -113,7 +113,7 @@ func (q *Query) Insert(d interface{}) (id int64, err error) {
 }
 
 func (q *Query) InsertIgnore(d interface{}) (id int64, err error) {
-	data := S2D(d)
+	data := s2d(d)
 	kStr, vStr, args := GetSqlInsert(data)
 	s := "INSERT IGNORE INTO `" + q.table + "`(" + kStr + ") VALUES (" + vStr + ")"
 	LogWrite(s, args...)
@@ -133,7 +133,7 @@ func (q *Query) InsertIgnore(d interface{}) (id int64, err error) {
 }
 
 func (q *Query) Replace(d interface{}) (id int64, err error) {
-	data := S2D(d)
+	data := s2d(d)
 	kStr, vStr, args := GetSqlInsert(data)
 	s := "REPLACE INTO `" + q.table + "`(" + kStr + ") VALUES (" + vStr + ")"
 	LogWrite(s, args...)
@@ -153,7 +153,7 @@ func (q *Query) Replace(d interface{}) (id int64, err error) {
 }
 
 func (q *Query) Update(d interface{}, where S) (n int64, err error) {
-	data := S2D(d)
+	data := s2d(d)
 	setStr, args := GetSqlUpdate(data)
 	whereStr, args2 := GetSqlWhere(where)
 	args = append(args, args2...)
@@ -230,22 +230,91 @@ func (q *Query) Count(where S) (n int64, err error) {
 }
 
 func (q *Query) One(dest interface{}) (err error) {
+	sv := reflect.ValueOf(dest)
+	if sv.Kind() != reflect.Ptr {
+		return errors.New("must pass a pointer, not a value, to Scan destination")
+	}
+	if sv.IsNil() {
+		return errors.New("nil pointer passed to Scan destination")
+	}
+
+	// 反射出需要绑定的结构体指针
+	sv = sv.Elem()
+	st := reflect.TypeOf(dest).Elem()
+	sn := st.NumField()
+	fieldArr := make(map[string]interface{}, sn)
+	for i := 0; i < sn; i++ {
+		f := st.Field(i)
+		if field := f.Tag.Get("db"); field != "" {
+			arr := strings.Split(field, ",")
+			fieldArr[arr[0]] = reflect.Indirect(sv).Field(i).Addr().Interface()
+		}
+	}
+
+	// 拼 SQL 语句
 	fields := GetSqlFields(q.fields)
 	whereStr, args := GetSqlWhere(q.selector)
 	s := "SELECT " + fields + " FROM `" + q.table + "`" + whereStr + " LIMIT 1"
 	LogWrite(s, args...)
 
-	udb := q.Unsafe()
-	err = udb.Get(dest, s, args...)
+	rows, err := q.Query(s, args...)
 	if err != nil {
-		if err != sql.ErrNoRows {
-			ErrorLogWrite(err, s, args...)
+		ErrorLogWrite(err, s, args...)
+		return err
+	}
+	defer rows.Close()
+
+	columns, err := rows.Columns()
+	if err != nil {
+		return err
+	}
+
+	values := make([]interface{}, len(columns))
+	for i := range values {
+		v, ok := fieldArr[columns[i]]
+		if ok {
+			values[i] = v
+		} else {
+			values[i] = new(interface{})
 		}
 	}
-	return
+
+	if rows.Next() {
+		err = rows.Scan(values...)
+		if err != nil {
+			ErrorLogWrite(err, s, args...)
+			return err
+		}
+	}
+	return nil
 }
 
 func (q *Query) All(dest interface{}) (err error) {
+	value := reflect.ValueOf(dest)
+	if value.Kind() != reflect.Ptr {
+		return errors.New("must pass a pointer, not a value, to Scan destination")
+	}
+
+	value = value.Elem()
+	if value.Kind() != reflect.Slice {
+		return fmt.Errorf("expected %s but got slice", value.Kind())
+	}
+
+	// 反射出需要绑定的结构体指针
+	st := value.Type().Elem()
+	sv := reflect.New(st)
+	iv := reflect.Indirect(sv)
+	sn := st.NumField()
+	fieldArr := make(map[string]interface{}, sn)
+	for i := 0; i < sn; i++ {
+		f := st.Field(i)
+		if field := f.Tag.Get("db"); field != "" {
+			arr := strings.Split(field, ",")
+			fieldArr[arr[0]] = reflect.Indirect(sv).Field(i).Addr().Interface()
+		}
+	}
+
+	// 拼 SQL 语句
 	fields := GetSqlFields(q.fields)
 	whereStr, args := GetSqlWhere(q.selector)
 	orderStr := GetSqlOrderBy(q.orderBy)
@@ -253,19 +322,43 @@ func (q *Query) All(dest interface{}) (err error) {
 	s := "SELECT " + fields + " FROM `" + q.table + "`" + whereStr + orderStr + limitStr
 	LogWrite(s, args...)
 
-	udb := q.Unsafe()
-	err = udb.Select(dest, s, args...)
+	rows, err := q.Query(s, args...)
 	if err != nil {
 		ErrorLogWrite(err, s, args...)
-		return
+		return err
 	}
-	return
+	defer rows.Close()
+
+	columns, err := rows.Columns()
+	if err != nil {
+		return err
+	}
+
+	values := make([]interface{}, len(columns))
+	for i := range values {
+		v, ok := fieldArr[columns[i]]
+		if ok {
+			values[i] = v
+		} else {
+			values[i] = new(interface{})
+		}
+	}
+
+	for rows.Next() {
+		err = rows.Scan(values...)
+		if err != nil {
+			return err
+		}
+
+		value.Set(reflect.Append(value, iv))
+	}
+	return nil
 }
 
 func (q *Query) OneMap() (row map[string]interface{}, columns []string, err error) {
 	whereStr, args := GetSqlWhere(q.selector)
 	fields := GetSqlFields(q.fields)
-	s := "SELECT " + fields + " FROM `" + q.table + "`" + whereStr
+	s := "SELECT " + fields + " FROM `" + q.table + "`" + whereStr + " LIMIT 1"
 	LogWrite(s, args...)
 
 	var rows *sql.Rows
@@ -276,12 +369,26 @@ func (q *Query) OneMap() (row map[string]interface{}, columns []string, err erro
 	}
 	defer rows.Close()
 
+	columns, err = rows.Columns()
+	if err != nil {
+		return
+	}
+
+	values := make([]interface{}, len(columns))
+	for i := range values {
+		values[i] = new(interface{})
+	}
+
 	if rows.Next() {
-		m := map[string]interface{}{}
-		columns, err = MapScan(rows, m)
+		err = rows.Scan(values...)
 		if err != nil {
 			ErrorLogWrite(err, s, args...)
 			return
+		}
+
+		m := map[string]interface{}{}
+		for i, column := range columns {
+			m[column] = *(values[i].(*interface{}))
 		}
 		row = m
 	}
@@ -304,21 +411,7 @@ func (q *Query) AllMap() (list []map[string]interface{}, columns []string, err e
 	}
 	defer rows.Close()
 
-	for rows.Next() {
-		m := map[string]interface{}{}
-		columns, err = MapScan(rows, m)
-		if err != nil {
-			ErrorLogWrite(err, s, args...)
-			return
-		}
-		list = append(list, m)
-	}
-	return
-}
-
-// 绑定到 Map
-func MapScan(r *sql.Rows, dest map[string]interface{}) (columns []string, err error) {
-	columns, err = r.Columns()
+	columns, err = rows.Columns()
 	if err != nil {
 		return
 	}
@@ -328,16 +421,19 @@ func MapScan(r *sql.Rows, dest map[string]interface{}) (columns []string, err er
 		values[i] = new(interface{})
 	}
 
-	err = r.Scan(values...)
-	if err != nil {
-		return
-	}
+	for rows.Next() {
+		err = rows.Scan(values...)
+		if err != nil {
+			ErrorLogWrite(err, s, args...)
+			return
+		}
 
-	for i, column := range columns {
-		dest[column] = *(values[i].(*interface{}))
+		m := map[string]interface{}{}
+		for i, column := range columns {
+			m[column] = *(values[i].(*interface{}))
+		}
+		list = append(list, m)
 	}
-
-	err = r.Err()
 	return
 }
 
@@ -446,12 +542,12 @@ func GetSqlWhere(selector S) (whereStr string, args []interface{}) {
 	return
 }
 
-func S2D(data interface{}) (d []DocElem) {
+func s2d(data interface{}) (d []DocElem) {
 	st := reflect.TypeOf(data)
 	sv := reflect.ValueOf(data)
 
-	// 特殊处理时间
-	I2S := func(i interface{}) interface{} {
+	// 转换时间类型为字符串
+	i2s := func(i interface{}) interface{} {
 		switch i.(type) {
 		case time.Time:
 			i = i.(time.Time).Format("2006-01-02 15:04:05")
@@ -466,10 +562,10 @@ func S2D(data interface{}) (d []DocElem) {
 				if strings.Contains(field, ",") {
 					arr := strings.Split(field, ",")
 					if arr[1] != "auto_increment" {
-						d = append(d, DocElem{arr[0], I2S(sv.Field(i).Interface())})
+						d = append(d, DocElem{arr[0], i2s(sv.Field(i).Interface())})
 					}
 				} else {
-					d = append(d, DocElem{field, I2S(sv.Field(i).Interface())})
+					d = append(d, DocElem{field, i2s(sv.Field(i).Interface())})
 				}
 			}
 		}
