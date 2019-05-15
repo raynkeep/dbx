@@ -151,7 +151,8 @@ func (q *Query) Replace(d interface{}) (id int64, err error) {
 	return
 }
 
-func (q *Query) Update(data D, where S) (n int64, err error) {
+func (q *Query) Update(d interface{}, where S) (n int64, err error) {
+	data := S2D(d)
 	setStr, args := GetSqlUpdate(data)
 	whereStr, args2 := GetSqlWhere(where)
 	args = append(args, args2...)
@@ -448,6 +449,15 @@ func S2D(data interface{}) (d []DocElem) {
 	st := reflect.TypeOf(data)
 	sv := reflect.ValueOf(data)
 
+	// 特殊处理时间
+	I2S := func(i interface{}) interface{} {
+		switch i.(type) {
+		case time.Time:
+			i = i.(time.Time).Format("2006-01-02 15:04:05")
+		}
+		return i
+	}
+
 	f := func() {
 		for i := 0; i < st.NumField(); i++ {
 			f := st.Field(i)
@@ -455,10 +465,10 @@ func S2D(data interface{}) (d []DocElem) {
 				if strings.Contains(field, ",") {
 					arr := strings.Split(field, ",")
 					if arr[1] != "auto_increment" {
-						d = append(d, DocElem{arr[0], sv.Field(i).Interface()})
+						d = append(d, DocElem{arr[0], I2S(sv.Field(i).Interface())})
 					}
 				} else {
-					d = append(d, DocElem{field, sv.Field(i).Interface()})
+					d = append(d, DocElem{field, I2S(sv.Field(i).Interface())})
 				}
 			}
 		}

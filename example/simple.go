@@ -111,6 +111,18 @@ CREATE TABLE user
 	fmt.Println()
 	fmt.Printf("Read: %+v\n", row)
 
+	// 更新2
+	row.Gid = 4
+	row.Name = "test123"
+	n, err = db.Table("user").Update(row, dbx.S{
+		{"uid", "=", 1},
+	})
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println()
+	fmt.Println("Update2:", n)
+
 	// 读取多条 到 结构体
 	var list []User
 	err = db.Table("user").Fields([]string{
