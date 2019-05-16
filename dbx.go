@@ -534,6 +534,9 @@ func GetSqlWhere(selector S) (whereStr string, args []interface{}) {
 				whereStr += "`" + v.Field + "` IN (" + s2 + ") AND "
 			}
 		} else {
+			if v.Symbol == "" {
+				v.Symbol = "="
+			}
 			whereStr += "`" + v.Field + "` " + v.Symbol + " ? AND "
 			args = append(args, v.Value)
 		}
