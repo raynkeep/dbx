@@ -264,27 +264,32 @@ func (q *Query) One(dest interface{}) (err error) {
 	}
 	defer rows.Close()
 
-	columns, err := rows.Columns()
-	if err != nil {
-		return err
-	}
-
-	values := make([]interface{}, len(columns))
-	for i := range values {
-		v, ok := fieldArr[columns[i]]
-		if ok {
-			values[i] = v
-		} else {
-			values[i] = new(interface{})
-		}
-	}
-
 	if rows.Next() {
+		columns, err := rows.Columns()
+		if err != nil {
+			return err
+		}
+
+		values := make([]interface{}, len(columns))
+		for i := range values {
+			v, ok := fieldArr[columns[i]]
+			if ok {
+				values[i] = v
+			} else {
+				values[i] = new(interface{})
+			}
+		}
+
 		err = rows.Scan(values...)
 		if err != nil {
 			ErrorLogWrite(err, s, args...)
 			return err
 		}
+	} else {
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		return sql.ErrNoRows
 	}
 	return nil
 }
