@@ -445,6 +445,7 @@ func (q *Query) AllMap() (list []map[string]interface{}, columns []string, err e
 func GetSqlFields(fields []string) (s string) {
 	if len(fields) > 0 {
 		for _, field := range fields {
+			field = strings.Replace(field, " ", "", -1)
 			s += "`" + field + "`,"
 		}
 		s = strings.TrimRight(s, ",")
