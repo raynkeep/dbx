@@ -254,7 +254,8 @@ func (q *Query) One(dest interface{}) (err error) {
 	// 拼 SQL 语句
 	fields := GetSqlFields(q.fields)
 	whereStr, args := GetSqlWhere(q.selector)
-	s := "SELECT " + fields + " FROM `" + q.table + "`" + whereStr + " LIMIT 1"
+	orderStr := GetSqlOrderBy(q.orderBy)
+	s := "SELECT " + fields + " FROM `" + q.table + "`" + whereStr + orderStr + " LIMIT 1"
 	LogWrite(s, args...)
 
 	rows, err := q.Query(s, args...)
@@ -363,7 +364,8 @@ func (q *Query) All(dest interface{}) (err error) {
 func (q *Query) OneMap() (row map[string]interface{}, columns []string, err error) {
 	whereStr, args := GetSqlWhere(q.selector)
 	fields := GetSqlFields(q.fields)
-	s := "SELECT " + fields + " FROM `" + q.table + "`" + whereStr + " LIMIT 1"
+	orderStr := GetSqlOrderBy(q.orderBy)
+	s := "SELECT " + fields + " FROM `" + q.table + "`" + whereStr + orderStr + " LIMIT 1"
 	LogWrite(s, args...)
 
 	var rows *sql.Rows
