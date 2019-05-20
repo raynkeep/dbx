@@ -651,8 +651,8 @@ func ErrorLogWrite(e error, s string, args ...interface{}) {
 func ReplaceSlash(args ...interface{}) []interface{} {
 	for k := range args {
 		if s, ok := args[k].(string); ok {
-			s = strings.Replace(s, "'", "\\'", -1)
 			s = strings.Replace(s, "\\", "\\\\", -1)
+			s = strings.Replace(s, "'", "\\'", -1)
 			args[k] = s
 		}
 	}
