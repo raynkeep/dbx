@@ -402,6 +402,48 @@ func (q *Query) OneMap() (row map[string]interface{}, columns []string, err erro
 	return
 }
 
+func (q *Query) OneKv() (row map[string]string, err error) {
+	whereStr, args := GetSqlWhere(q.selector)
+	fields := GetSqlFields(q.fields)
+	orderStr := GetSqlOrderBy(q.orderBy)
+	s := "SELECT " + fields + " FROM `" + q.table + "`" + whereStr + orderStr + " LIMIT 1"
+	LogWrite(s, args...)
+
+	var rows *sql.Rows
+	rows, err = q.Query(s, args...)
+	if err != nil {
+		ErrorLogWrite(err, s, args...)
+		return
+	}
+	defer rows.Close()
+
+	var columns []string
+	columns, err = rows.Columns()
+	if err != nil {
+		return
+	}
+
+	values := make([]interface{}, len(columns))
+	for i := range values {
+		values[i] = new(interface{})
+	}
+
+	if rows.Next() {
+		err = rows.Scan(values...)
+		if err != nil {
+			ErrorLogWrite(err, s, args...)
+			return
+		}
+
+		m := map[string]string{}
+		for i, column := range columns {
+			m[column] = fmt.Sprintf("%v", values[i])
+		}
+		row = m
+	}
+	return
+}
+
 func (q *Query) AllMap() (list []map[string]interface{}, columns []string, err error) {
 	fields := GetSqlFields(q.fields)
 	whereStr, args := GetSqlWhere(q.selector)
@@ -438,6 +480,49 @@ func (q *Query) AllMap() (list []map[string]interface{}, columns []string, err e
 		m := map[string]interface{}{}
 		for i, column := range columns {
 			m[column] = *(values[i].(*interface{}))
+		}
+		list = append(list, m)
+	}
+	return
+}
+
+func (q *Query) AllKv() (list []map[string]string, err error) {
+	fields := GetSqlFields(q.fields)
+	whereStr, args := GetSqlWhere(q.selector)
+	orderStr := GetSqlOrderBy(q.orderBy)
+	limitStr := GetSqlLimit(q.skip, q.limit)
+	s := "SELECT " + fields + " FROM `" + q.table + "`" + whereStr + orderStr + limitStr
+	LogWrite(s, args...)
+
+	var rows *sql.Rows
+	rows, err = q.Query(s, args...)
+	if err != nil {
+		ErrorLogWrite(err, s, args...)
+		return
+	}
+	defer rows.Close()
+
+	var columns []string
+	columns, err = rows.Columns()
+	if err != nil {
+		return
+	}
+
+	values := make([]interface{}, len(columns))
+	for i := range values {
+		values[i] = new(interface{})
+	}
+
+	for rows.Next() {
+		err = rows.Scan(values...)
+		if err != nil {
+			ErrorLogWrite(err, s, args...)
+			return
+		}
+
+		m := map[string]string{}
+		for i, column := range columns {
+			m[column] = fmt.Sprintf("%v", values[i])
 		}
 		list = append(list, m)
 	}
