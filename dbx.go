@@ -115,7 +115,7 @@ func (q *Query) Insert(d interface{}) (id int64, err error) {
 func (q *Query) InsertIgnore(d interface{}) (id int64, err error) {
 	data := s2d(d)
 	kStr, vStr, args := GetSqlInsert(data)
-	s := "INSERT IGNORE INTO `" + q.table + "`(" + kStr + ") VALUES (" + vStr + ")"
+	s := "INSERT OR IGNORE INTO `" + q.table + "`(" + kStr + ") VALUES (" + vStr + ")"
 	LogWrite(s, args...)
 
 	res, err := q.Exec(s, args...)
