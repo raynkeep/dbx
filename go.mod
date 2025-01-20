@@ -1,4 +1,4 @@
-module github.com/ryanker/dbx
+module github.com/ryankeep/dbx
 
 go 1.12
 
